@@ -54,7 +54,7 @@ def home():
 
 @app.get("/generate")
 def generate(prompt: str):
-  if not HF_TOKEN:
+  if not os.environ.get("HF_TOKEN"):
     return {"error": "HF_TOKEN is missing in this Vercel environment."}
   try:
     output = client.text_generation(prompt, max_new_tokens=150)
