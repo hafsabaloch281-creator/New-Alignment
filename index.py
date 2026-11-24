@@ -1,60 +1,78 @@
-import gradio as gr
-import spaces
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+import os
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+
+app = FastAPI()
 
 MODEL_ID = "Ahm-d18/qwen-base-alignment-lab"
-
-tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
-model = AutoModelForCausalLM.from_pretrained(
-    MODEL_ID, torch_dtype=torch.float16, low_cpu_mem_usage=True
-)
-model.eval()
+SPACE_URL = "https://ahm-d18-qwen-alignment-lab-app.hf.space"
 
 
-@spaces.GPU(duration=60)
-def predict(prompt: str, max_new_tokens: int = 128) -> str:
-  if not prompt or not prompt.strip():
-    return "Please enter a prompt."
+@app.get("/", response_class=HTMLResponse)
+def home():
+  return f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Lab 10: Qwen Alignment App</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                max-width: 1100px;
+                margin: 30px auto;
+                padding: 20px;
+                background: #0f172a;
+                color: #f8fafc;
+            }}
+            .card {{
+                background: #1e293b;
+                padding: 20px;
+                border-radius: 10px;
+                border: 1px solid #334155;
+                margin-bottom: 20px;
+            }}
+            .btn {{
+                display: inline-block;
+                padding: 10px 18px;
+                background: #3b82f6;
+                color: #ffffff;
+                text-decoration: none;
+                border-radius: 6px;
+                font-weight: bold;
+                margin-top: 10px;
+            }}
+            .btn:hover {{
+                background: #2563eb;
+            }}
+            iframe {{
+                width: 100%;
+                height: 750px;
+                border: 1px solid #334155;
+                border-radius: 10px;
+                background: #0f172a;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h2>Lab 10: Model Alignment Interactive App</h2>
+            <p><strong>Model:</strong> <code>{MODEL_ID}</code></p>
+            <p><strong>Hugging Face Space:</strong> <code>Ahm-d18/qwen-alignment-lab-app</code></p>
+            <a class="btn" href="{SPACE_URL}" target="_blank" rel="noopener noreferrer">Open Full App in New Tab</a>
+        </div>
+        <iframe src="{SPACE_URL}" title="Qwen Alignment Gradio App"></iframe>
+    </body>
+    </html>
+    """
 
-  device = "cuda" if torch.cuda.is_available() else "cpu"
-  model.to(device)
 
-  if hasattr(tokenizer, "apply_chat_template") and tokenizer.chat_template:
-    text = tokenizer.apply_chat_template(
-        [{"role": "user", "content": prompt.strip()}],
-        tokenize=False,
-        add_generation_prompt=True,
-    )
-  else:
-    text = prompt.strip()
-
-  inputs = tokenizer(text, return_tensors="pt").to(device)
-  with torch.no_grad():
-    outputs = model.generate(
-        **inputs,
-        max_new_tokens=int(max_new_tokens),
-        do_sample=False,
-        pad_token_id=tokenizer.eos_token_id,
-    )
-  gen_ids = outputs[0][inputs["input_ids"].shape[1] :]
-  return tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
-
-
-demo = gr.Interface(
-    fn=predict,
-    inputs=[
-        gr.Textbox(
-            lines=3,
-            label="Prompt",
-            value="Explain what In-Contextual Learning.",
-        ),
-        gr.Slider(32, 256, value=128, step=16, label="Max New Tokens"),
-    ],
-    outputs=gr.Textbox(lines=10, label="Model Prediction"),
-    title="Lab 10: Qwen Alignment Model App",
-    description=f"Model: `{MODEL_ID}`",
-)
-
-if __name__ == "__main__":
-  demo.launch()
+@app.get("/health")
+def health():
+  return {
+      "status": "ok",
+      "model": MODEL_ID,
+      "space_url": SPACE_URL,
+      "hf_token_configured": bool(os.environ.get("HF_TOKEN")),
+  }
